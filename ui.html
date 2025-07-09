@@ -1,0 +1,615 @@
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  /* Custom Slider Component */
+  .custom-slider {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 8px 0;
+  }
+
+  .slider-track {
+    position: relative;
+    flex: 1;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    margin-right: 12px;
+  }
+
+  .slider-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: #000;
+    border-radius: 4px;
+    transition: width 0.1s ease;
+  }
+
+  .slider-handle {
+    position: absolute;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border: 2px solid #000;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: all 0.1s ease;
+    z-index: 2;
+  }
+
+  .slider-handle:hover,
+  .slider-handle.dragging {
+    background: #f5f5f5;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .slider-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 45px;
+    height: 28px;
+    padding: 0 8px;
+    background: #f0f0f0;
+    border-radius: 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    user-select: none;
+  }
+
+  .slider-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  .slider-container {
+    margin-bottom: 16px;
+  }
+
+  .slider-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+    color: #333;
+  }
+</style>
+<div style="padding: 16px;">
+  
+  <!-- 预览区域 -->
+  <div style="margin-bottom: 16px;">
+    <div style="width: 100%; aspect-ratio: 1; border: 1px solid #ccc; background: #f5f5f5; position: relative;">
+      <canvas id="preview-canvas" style="width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0;"></canvas>
+      <div id="preview-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #666; position: absolute; top: 0; left: 0;">
+        选择对象以查看预览
+      </div>
+    </div>
+  </div>
+  
+  <!-- 基础参数控制 -->
+  <div class="slider-container">
+    <label class="slider-label">模糊半径</label>
+    <div class="custom-slider">
+      <div class="slider-track">
+        <div class="slider-progress" id="radius-progress"></div>
+        <div class="slider-handle" id="radius-handle"></div>
+        <input class="slider-input" id="radius" type="range" value="5" min="1" max="200" step="1">
+      </div>
+      <div class="slider-value" id="radius-value">5</div>
+    </div>
+  </div>
+  
+  <div class="slider-container">
+    <label class="slider-label">缩放比例</label>
+    <div class="custom-slider">
+      <div class="slider-track">
+        <div class="slider-progress" id="scale-progress"></div>
+        <div class="slider-handle" id="scale-handle"></div>
+        <input class="slider-input" id="scale" type="range" value="0.33" min="0.1" max="1.0" step="0.01">
+      </div>
+      <div class="slider-value" id="scale-value">0.33</div>
+    </div>
+    <div style="font-size: 11px; color: #666; margin-top: 2px;">较小的值可提高性能，但降低模糊质量</div>
+  </div>
+  
+  <!-- 高级参数 -->
+  <div style="margin-bottom: 16px;">
+    <div id="advanced-toggle" style="cursor: pointer; font-size: 14px; color: #999; margin-bottom: 8px;">
+      ▶ 高级参数
+    </div>
+    <div id="advanced-params" style="display: none;">
+      <div class="slider-container">
+        <label class="slider-label">Alpha 精度</label>
+        <div class="custom-slider">
+          <div class="slider-track">
+            <div class="slider-progress" id="aprec-progress"></div>
+            <div class="slider-handle" id="aprec-handle"></div>
+            <input class="slider-input" id="aprec" type="range" value="16" min="8" max="24" step="1">
+          </div>
+          <div class="slider-value" id="aprec-value">16</div>
+        </div>
+      </div>
+      
+      <div class="slider-container">
+        <label class="slider-label">状态精度</label>
+        <div class="custom-slider">
+          <div class="slider-track">
+            <div class="slider-progress" id="zprec-progress"></div>
+            <div class="slider-handle" id="zprec-handle"></div>
+            <input class="slider-input" id="zprec" type="range" value="7" min="4" max="12" step="1">
+          </div>
+          <div class="slider-value" id="zprec-value">7</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 按钮 -->
+  <div>
+    <button id="apply-blur" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; width: 100%;">创建模糊图层</button>
+  </div>
+  
+</div>
+
+<script>
+// JavaScript implementation of the exponential blur algorithm for UI processing
+class ExponentialBlur {
+  
+  // Blur inner function - applies blur to a single pixel
+  static blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec) {
+    const R = pixels[pixelIndex];
+    const G = pixels[pixelIndex + 1];
+    const B = pixels[pixelIndex + 2];
+    const A = pixels[pixelIndex + 3];
+
+    zR[0] += (alpha * ((R << zprec) - zR[0])) >> aprec;
+    zG[0] += (alpha * ((G << zprec) - zG[0])) >> aprec;
+    zB[0] += (alpha * ((B << zprec) - zB[0])) >> aprec;
+    zA[0] += (alpha * ((A << zprec) - zA[0])) >> aprec;
+
+    pixels[pixelIndex] = zR[0] >> zprec;
+    pixels[pixelIndex + 1] = zG[0] >> zprec;
+    pixels[pixelIndex + 2] = zB[0] >> zprec;
+    pixels[pixelIndex + 3] = zA[0] >> zprec;
+  }
+
+  // Blur row function - applies blur to a single row
+  static blurRow(pixels, width, height, channels, line, alpha, aprec, zprec) {
+    const scanlineStart = line * width * channels;
+    
+    const zR = [pixels[scanlineStart] << zprec];
+    const zG = [pixels[scanlineStart + 1] << zprec];
+    const zB = [pixels[scanlineStart + 2] << zprec];
+    const zA = [pixels[scanlineStart + 3] << zprec];
+
+    // Forward pass
+    for (let index = 0; index < width; index++) {
+      const pixelIndex = scanlineStart + index * channels;
+      this.blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec);
+    }
+
+    // Backward pass
+    for (let index = width - 2; index >= 0; index--) {
+      const pixelIndex = scanlineStart + index * channels;
+      this.blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec);
+    }
+  }
+
+  // Blur column function - applies blur to a single column
+  static blurColumn(pixels, width, height, channels, x, alpha, aprec, zprec) {
+    const startIndex = x * channels;
+    
+    const zR = [pixels[startIndex] << zprec];
+    const zG = [pixels[startIndex + 1] << zprec];
+    const zB = [pixels[startIndex + 2] << zprec];
+    const zA = [pixels[startIndex + 3] << zprec];
+
+    // Forward pass
+    for (let index = width; index < (height - 1) * width; index += width) {
+      const pixelIndex = startIndex + index * channels;
+      this.blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec);
+    }
+
+    // Backward pass
+    for (let index = (height - 2) * width; index >= 0; index -= width) {
+      const pixelIndex = startIndex + index * channels;
+      this.blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec);
+    }
+  }
+
+  // Main exponential blur function
+  static applyBlur(pixels, width, height, channels, radius, aprec = 16, zprec = 7) {
+    if (radius < 1) return;
+
+    // Calculate alpha such that 90% of kernel is within radius
+    const alpha = Math.floor((1 << aprec) * (1.0 - Math.exp(-2.3 / (radius + 1))));
+
+    // Apply blur to all rows
+    for (let row = 0; row < height; row++) {
+      this.blurRow(pixels, width, height, channels, row, alpha, aprec, zprec);
+    }
+
+    // Apply blur to all columns
+    for (let col = 0; col < width; col++) {
+      this.blurColumn(pixels, width, height, channels, col, alpha, aprec, zprec);
+    }
+  }
+}
+
+// Global variables for preview
+let currentImageData = null;
+let originalImage = null;
+let previewTimeoutId = null;
+
+// Process image data with exponential blur with performance scaling
+async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33) {
+  return new Promise((resolve, reject) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          // Create canvas for original image
+          const originalCanvas = document.createElement('canvas');
+          const originalCtx = originalCanvas.getContext('2d');
+          
+          originalCanvas.width = img.width;
+          originalCanvas.height = img.height;
+          
+          // Draw original image
+          originalCtx.drawImage(img, 0, 0);
+          
+          // Calculate scaled dimensions
+          const scaledWidth = Math.max(1, Math.floor(img.width * scale));
+          const scaledHeight = Math.max(1, Math.floor(img.height * scale));
+          
+          // Create scaled canvas for processing
+          const scaledCanvas = document.createElement('canvas');
+          const scaledCtx = scaledCanvas.getContext('2d');
+          
+          scaledCanvas.width = scaledWidth;
+          scaledCanvas.height = scaledHeight;
+          
+          // Draw scaled-down image
+          scaledCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+          
+          // Get image data from scaled canvas
+          const scaledImageData = scaledCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+          const pixels = scaledImageData.data;
+          
+          // Apply exponential blur on scaled image with scaled radius
+          const scaledRadius = Math.max(1, Math.floor(radius * scale));
+          ExponentialBlur.applyBlur(pixels, scaledWidth, scaledHeight, 4, scaledRadius, aprec, zprec);
+          
+          // Put processed data back to scaled canvas
+          scaledCtx.putImageData(scaledImageData, 0, 0);
+          
+          // Create final canvas at original size
+          const finalCanvas = document.createElement('canvas');
+          const finalCtx = finalCanvas.getContext('2d');
+          
+          finalCanvas.width = img.width;
+          finalCanvas.height = img.height;
+          
+          // Stretch the blurred scaled image back to original size
+          finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
+          finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
+          
+          // Convert to blob and then to array buffer
+          finalCanvas.toBlob((blob) => {
+            if (blob) {
+              blob.arrayBuffer().then(buffer => {
+                resolve(Array.from(new Uint8Array(buffer)));
+              });
+            } else {
+              reject(new Error('Failed to create blob from canvas'));
+            }
+          }, 'image/png');
+          
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      img.onerror = () => reject(new Error('Failed to load image'));
+      
+      // Create blob URL from image data
+      const blob = new Blob([new Uint8Array(imageData)], { type: 'image/png' });
+      img.src = URL.createObjectURL(blob);
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Update preview with current parameters
+async function updatePreview() {
+  if (!currentImageData) {
+    console.log('No current image data');
+    return;
+  }
+  
+  const radius = parseInt(document.getElementById('radius').value);
+  const aprec = parseInt(document.getElementById('aprec').value);
+  const zprec = parseInt(document.getElementById('zprec').value);
+  const performanceScale = parseFloat(document.getElementById('scale').value);
+  
+  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale });
+  
+  try {
+    const img = new Image();
+    img.onload = () => {
+      console.log('Image loaded, size:', img.width, 'x', img.height);
+      const canvas = document.getElementById('preview-canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // Get the container dimensions (1:1 aspect ratio)
+      const container = canvas.parentElement;
+      const containerSize = container.clientWidth || 400; // Fallback size
+      console.log('Container size:', containerSize);
+      
+      // Set canvas size to container size
+      canvas.width = containerSize;
+      canvas.height = containerSize;
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Create temp canvas for processing with performance scaling
+      const originalCanvas = document.createElement('canvas');
+      const originalCtx = originalCanvas.getContext('2d');
+      originalCanvas.width = img.width;
+      originalCanvas.height = img.height;
+      originalCtx.drawImage(img, 0, 0);
+      
+      // Calculate scaled dimensions for processing
+      const processWidth = Math.max(1, Math.floor(img.width * performanceScale));
+      const processHeight = Math.max(1, Math.floor(img.height * performanceScale));
+      console.log('Process size:', processWidth, 'x', processHeight);
+      
+      // Create scaled canvas for processing
+      const scaledCanvas = document.createElement('canvas');
+      const scaledCtx = scaledCanvas.getContext('2d');
+      scaledCanvas.width = processWidth;
+      scaledCanvas.height = processHeight;
+      
+      // Draw scaled-down image
+      scaledCtx.drawImage(img, 0, 0, processWidth, processHeight);
+      
+      // Get image data and apply blur
+      const imageDataObj = scaledCtx.getImageData(0, 0, processWidth, processHeight);
+      const pixels = imageDataObj.data;
+      
+      // Apply blur with scaled radius
+      const scaledRadius = Math.max(1, Math.floor(radius * performanceScale));
+      ExponentialBlur.applyBlur(pixels, processWidth, processHeight, 4, scaledRadius, aprec, zprec);
+      scaledCtx.putImageData(imageDataObj, 0, 0);
+      
+      // Create final canvas at original size
+      const finalCanvas = document.createElement('canvas');
+      const finalCtx = finalCanvas.getContext('2d');
+      finalCanvas.width = img.width;
+      finalCanvas.height = img.height;
+      
+      // Stretch the blurred scaled image back to original size
+      finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
+      finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
+      
+      // Calculate scaling to fit in container while maintaining aspect ratio
+      const displayScale = Math.min(containerSize / img.width, containerSize / img.height);
+      const scaledWidth = img.width * displayScale;
+      const scaledHeight = img.height * displayScale;
+      const offsetX = (containerSize - scaledWidth) / 2;
+      const offsetY = (containerSize - scaledHeight) / 2;
+      
+      console.log('Display scale:', displayScale, 'Final size:', scaledWidth, 'x', scaledHeight, 'Offset:', offsetX, offsetY);
+      
+      // Draw scaled result centered in canvas
+      ctx.drawImage(finalCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
+      console.log('Preview updated successfully');
+    };
+    
+    img.onerror = () => {
+      console.error('Failed to load image for preview');
+    };
+    
+    const blob = new Blob([new Uint8Array(currentImageData)], { type: 'image/png' });
+    img.src = URL.createObjectURL(blob);
+    console.log('Image blob created and set as src');
+    
+  } catch (error) {
+    console.error('Preview update error:', error);
+  }
+}
+
+// Debounced preview update
+function schedulePreviewUpdate() {
+  if (previewTimeoutId) {
+    clearTimeout(previewTimeoutId);
+  }
+  previewTimeoutId = setTimeout(updatePreview, 100);
+}
+
+// Listen for messages from plugin
+window.onmessage = async (event) => {
+  const msg = event.data.pluginMessage;
+  
+  if (msg.type === 'process-exponential-blur') {
+    try {
+      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale);
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'blur-processed', 
+          processedData: processedData 
+        } 
+      }, '*');
+    } catch (error) {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'blur-error', 
+          error: error.message 
+        } 
+      }, '*');
+    }
+  }
+  
+  if (msg.type === 'update-preview') {
+    currentImageData = msg.imageData;
+    document.getElementById('preview-canvas').style.display = 'block';
+    document.getElementById('preview-placeholder').style.display = 'none';
+    // Add a small delay to ensure the container is properly sized
+    setTimeout(() => {
+      updatePreview();
+    }, 10);
+  }
+  
+  if (msg.type === 'hide-preview') {
+    currentImageData = null;
+    document.getElementById('preview-canvas').style.display = 'none';
+    document.getElementById('preview-placeholder').style.display = 'flex';
+  }
+};
+
+// Custom slider functionality
+function initializeCustomSliders() {
+  const sliders = [
+    { id: 'radius', min: 1, max: 200, step: 1, format: (val) => val },
+    { id: 'scale', min: 0.1, max: 1.0, step: 0.01, format: (val) => parseFloat(val).toFixed(2) },
+    { id: 'aprec', min: 8, max: 24, step: 1, format: (val) => val },
+    { id: 'zprec', min: 4, max: 12, step: 1, format: (val) => val }
+  ];
+
+  sliders.forEach(slider => {
+    const input = document.getElementById(slider.id);
+    const handle = document.getElementById(slider.id + '-handle');
+    const progress = document.getElementById(slider.id + '-progress');
+    const valueDisplay = document.getElementById(slider.id + '-value');
+    
+    if (!input || !handle || !progress || !valueDisplay) return;
+
+    function updateSlider() {
+      const value = parseFloat(input.value);
+      const percentage = ((value - slider.min) / (slider.max - slider.min)) * 100;
+      
+      progress.style.width = percentage + '%';
+      handle.style.left = percentage + '%';
+      valueDisplay.textContent = slider.format(value);
+    }
+
+    // Initialize slider appearance
+    updateSlider();
+
+    // Handle input changes
+    input.addEventListener('input', updateSlider);
+  });
+}
+
+// Update parameter display values
+function updateParameterValues() {
+  document.getElementById('radius-value').textContent = document.getElementById('radius').value;
+  document.getElementById('aprec-value').textContent = document.getElementById('aprec').value;
+  document.getElementById('zprec-value').textContent = document.getElementById('zprec').value;
+  document.getElementById('scale-value').textContent = parseFloat(document.getElementById('scale').value).toFixed(2);
+}
+
+// Event listeners for parameters
+document.getElementById('radius').oninput = () => {
+  updateParameterValues();
+  schedulePreviewUpdate();
+};
+
+document.getElementById('aprec').oninput = () => {
+  updateParameterValues();
+  schedulePreviewUpdate();
+};
+
+document.getElementById('zprec').oninput = () => {
+  updateParameterValues();
+  schedulePreviewUpdate();
+};
+
+document.getElementById('scale').oninput = () => {
+  updateParameterValues();
+  schedulePreviewUpdate();
+};
+
+// Advanced parameters toggle
+document.getElementById('advanced-toggle').onclick = () => {
+  const advancedParams = document.getElementById('advanced-params');
+  const toggle = document.getElementById('advanced-toggle');
+  
+  if (advancedParams.style.display === 'none') {
+    advancedParams.style.display = 'block';
+    toggle.textContent = '▼ 高级参数';
+    // Notify plugin to expand height (1:1 preview + controls + advanced params)
+    parent.postMessage({ 
+      pluginMessage: { 
+        type: 'resize-ui', 
+        height: 770 
+      } 
+    }, '*');
+  } else {
+    advancedParams.style.display = 'none';
+    toggle.textContent = '▶ 高级参数';
+    // Notify plugin to reduce height (1:1 preview + basic controls)
+    parent.postMessage({ 
+      pluginMessage: { 
+        type: 'resize-ui', 
+        height: 650 
+      } 
+    }, '*');
+  }
+};
+
+document.getElementById('apply-blur').onclick = () => {
+  const radius = parseInt(document.getElementById('radius').value, 10);
+  const aprec = parseInt(document.getElementById('aprec').value, 10);
+  const zprec = parseInt(document.getElementById('zprec').value, 10);
+  const scale = parseFloat(document.getElementById('scale').value);
+  
+  if (radius < 1 || radius > 200) {
+    alert('模糊半径必须在1到200之间');
+    return;
+  }
+  
+  if (scale < 0.1 || scale > 1.0) {
+    alert('性能缩放必须在0.1到1.0之间');
+    return;
+  }
+  
+  parent.postMessage({ 
+    pluginMessage: { 
+      type: 'apply-blur', 
+      radius: radius,
+      aprec: aprec,
+      zprec: zprec,
+      scale: scale
+    } 
+  }, '*');
+}
+
+// Initialize parameter values
+updateParameterValues();
+
+// Initialize custom sliders
+initializeCustomSliders();
+
+// Request preview update when plugin loads
+parent.postMessage({ pluginMessage: { type: 'request-preview' } }, '*');
+</script>
