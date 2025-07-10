@@ -130,10 +130,33 @@ async function _createImageFromPixelData(pixels: Uint8ClampedArray, width: numbe
 }
 
 // Show the UI with default height (1:1 preview + basic controls)
-figma.showUI(__html__, { width: 420, height: 650 });
+figma.showUI(__html__, { width: 360, height: 620 });
 
 // Keep track of current selection for preview
 let currentSelection: readonly SceneNode[] = [];
+
+// Check initial selection on startup
+const initialSelection = figma.currentPage.selection;
+currentSelection = initialSelection;
+
+if (initialSelection.length === 1) {
+  // Send initial selection for preview
+  (async () => {
+    try {
+      const imageBytes = await initialSelection[0].exportAsync({
+        format: 'PNG',
+        constraint: { type: 'SCALE', value: 1.0 }
+      });
+      
+      figma.ui.postMessage({
+        type: 'update-preview',
+        imageData: Array.from(imageBytes)
+      });
+    } catch (error) {
+      console.error('Initial preview error:', error);
+    }
+  })();
+}
 
 // Update preview when selection changes
 figma.on('selectionchange', async () => {
@@ -186,7 +209,7 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
   
   if (msg.type === 'resize-ui') {
     if (msg.height) {
-      figma.ui.resize(420, msg.height);
+      figma.ui.resize(360, msg.height);
     }
   }
   
@@ -201,10 +224,12 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
     const radius = msg.radius || 5;
     const aprec = msg.aprec || 16;
     const zprec = msg.zprec || 7;
-    const scale = msg.scale || 0.33;
+    const scalePercent = msg.scale || 33;
+    const scale = scalePercent === 0 ? 0.01 : scalePercent / 100;
     
     try {
       let processedCount = 0;
+      const createdNodes: SceneNode[] = [];
       
       for (const node of selection) {
         // Export the node as image data - use original scale for processing
@@ -244,11 +269,17 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
           // Create a new image with the processed data
           const newImage = figma.createImage(processedImageBytes);
           
+          // Skip blur if radius is 0
+          if (radius === 0) {
+            figma.notify('模糊半径为0，跳过处理');
+            continue;
+          }
+          
           // Create a new rectangle node for the blurred image
           const blurredNode = figma.createRectangle();
           blurredNode.resize(node.width, node.height);
-          blurredNode.x = node.x + 20; // Offset slightly to show it's a new layer
-          blurredNode.y = node.y + 20;
+          blurredNode.x = node.x; // No offset - place directly on top
+          blurredNode.y = node.y;
           
           // Apply the processed image as a fill
           const imageFill: ImagePaint = {
@@ -262,16 +293,18 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
           
           blurredNode.fills = [imageFill];
           
-          // Name the new layer with all parameters
-          blurredNode.name = `${node.name} (指数模糊 r=${radius} s=${scale.toFixed(2)})`;
+          // Name the new layer with blur parameters only
+          blurredNode.name = `指数模糊 r=${radius} s=${scalePercent}%`;
           
-          // Add to the same parent as the original
+          // Add to the same parent as the original to maintain frame position
           if (node.parent) {
             node.parent.appendChild(blurredNode);
           } else {
             figma.currentPage.appendChild(blurredNode);
           }
           
+          // Add to created nodes array for selection
+          createdNodes.push(blurredNode);
           processedCount++;
           
         } catch (processingError) {
@@ -281,7 +314,9 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
       }
       
       if (processedCount > 0) {
-        figma.notify(`创建了 ${processedCount} 个模糊图层 (半径: ${radius}, 缩放: ${scale.toFixed(2)}, Alpha精度: ${aprec}, 状态精度: ${zprec})`);
+        // Select all newly created blurred nodes
+        figma.currentPage.selection = createdNodes;
+        figma.notify(`创建了 ${processedCount} 个模糊图层 (半径: ${radius}, 缩放: ${scalePercent}%, Alpha精度: ${aprec}, 状态精度: ${zprec})`);
       } else {
         figma.notify('没有对象被处理，请检查选择的对象类型');
       }

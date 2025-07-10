@@ -17,55 +17,94 @@
   .slider-track {
     position: relative;
     flex: 1;
-    height: 8px;
+    height: 22px;
     background: #e0e0e0;
-    border-radius: 4px;
+    border-radius: 11px;
     margin-right: 12px;
+    cursor: pointer;
   }
 
   .slider-progress {
     position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
+    top: 2px;
+    left: 2px;
+    height: 18px;
     background: #000;
-    border-radius: 4px;
-    transition: width 0.1s ease;
+    border-radius: 9px;
+    pointer-events: none;
   }
 
   .slider-handle {
     position: absolute;
     top: 50%;
-    width: 20px;
-    height: 20px;
-    background: #fff;
+    width: 18px;
+    height: 18px;
+    background: #ffffff;
     border: 2px solid #000;
     border-radius: 50%;
-    transform: translate(-50%, -50%);
-    cursor: pointer;
-    transition: all 0.1s ease;
-    z-index: 2;
+    transform: translateY(-50%);
+    cursor: grab;
+    z-index: 3;
   }
 
   .slider-handle:hover,
   .slider-handle.dragging {
-    background: #f5f5f5;
+    cursor: grabbing;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  .slider-value {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 45px;
+  .slider-value-input {
+    min-width: 50px;
     height: 28px;
-    padding: 0 8px;
-    background: #f0f0f0;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid transparent;
     border-radius: 14px;
     font-size: 14px;
     font-weight: 500;
     color: #333;
-    user-select: none;
+    text-align: center;
+    outline: none;
+    transition: all 0.1s ease;
+  }
+
+  .slider-value-input:hover {
+    background: #f0f0f0;
+    border-color: #d0d0d0;
+  }
+
+  .slider-value-input:focus {
+    border-color: #007acc;
+    background: #f0f0f0;
+  }
+
+  .slider-value-input::-webkit-outer-spin-button,
+  .slider-value-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .slider-value-input[type=number] {
+    -moz-appearance: textfield;
+  }
+
+  .scale-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .scale-input-container::after {
+    content: '%';
+    position: absolute;
+    right: 8px;
+    color: #666;
+    font-size: 14px;
+    pointer-events: none;
+  }
+
+  .scale-input-container .slider-value-input {
+    padding-right: 20px;
   }
 
   .slider-input {
@@ -89,6 +128,25 @@
     font-size: 14px;
     color: #333;
   }
+
+  .advanced-toggle {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #999;
+    margin-bottom: 8px;
+    user-select: none;
+  }
+
+  .advanced-toggle svg {
+    margin-right: 6px;
+    transition: transform 0.2s ease;
+  }
+
+  .advanced-toggle.expanded svg {
+    transform: rotate(90deg);
+  }
 </style>
 <div style="padding: 16px;">
   
@@ -109,9 +167,9 @@
       <div class="slider-track">
         <div class="slider-progress" id="radius-progress"></div>
         <div class="slider-handle" id="radius-handle"></div>
-        <input class="slider-input" id="radius" type="range" value="5" min="1" max="200" step="1">
+        <input class="slider-input" id="radius" type="range" value="5" min="0" max="200" step="1">
       </div>
-      <div class="slider-value" id="radius-value">5</div>
+      <input class="slider-value-input" id="radius-value" type="number" value="5" min="0" max="200" step="1">
     </div>
   </div>
   
@@ -121,40 +179,45 @@
       <div class="slider-track">
         <div class="slider-progress" id="scale-progress"></div>
         <div class="slider-handle" id="scale-handle"></div>
-        <input class="slider-input" id="scale" type="range" value="0.33" min="0.1" max="1.0" step="0.01">
+        <input class="slider-input" id="scale" type="range" value="33" min="0" max="100" step="1">
       </div>
-      <div class="slider-value" id="scale-value">0.33</div>
+      <div class="scale-input-container">
+        <input class="slider-value-input" id="scale-value" type="number" value="33" min="0" max="100" step="1">
+      </div>
     </div>
     <div style="font-size: 11px; color: #666; margin-top: 2px;">较小的值可提高性能，但降低模糊质量</div>
   </div>
   
   <!-- 高级参数 -->
   <div style="margin-bottom: 16px;">
-    <div id="advanced-toggle" style="cursor: pointer; font-size: 14px; color: #999; margin-bottom: 8px;">
-      ▶ 高级参数
+    <div id="advanced-toggle" class="advanced-toggle">
+        <svg width="6" height="10" viewBox="0 0 6 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 1L5 5L1 9" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+      模糊精度
     </div>
     <div id="advanced-params" style="display: none;">
       <div class="slider-container">
-        <label class="slider-label">Alpha 精度</label>
+        <label class="slider-label">Alpha 精度 (Alpha Precision)</label>
         <div class="custom-slider">
           <div class="slider-track">
             <div class="slider-progress" id="aprec-progress"></div>
             <div class="slider-handle" id="aprec-handle"></div>
             <input class="slider-input" id="aprec" type="range" value="16" min="8" max="24" step="1">
           </div>
-          <div class="slider-value" id="aprec-value">16</div>
+          <input class="slider-value-input" id="aprec-value" type="number" value="16" min="8" max="24" step="1">
         </div>
       </div>
       
       <div class="slider-container">
-        <label class="slider-label">状态精度</label>
+        <label class="slider-label">状态精度 (State Precision)</label>
         <div class="custom-slider">
           <div class="slider-track">
             <div class="slider-progress" id="zprec-progress"></div>
             <div class="slider-handle" id="zprec-handle"></div>
             <input class="slider-input" id="zprec" type="range" value="7" min="4" max="12" step="1">
           </div>
-          <div class="slider-value" id="zprec-value">7</div>
+          <input class="slider-value-input" id="zprec-value" type="number" value="7" min="4" max="12" step="1">
         </div>
       </div>
     </div>
@@ -162,7 +225,7 @@
   
   <!-- 按钮 -->
   <div>
-    <button id="apply-blur" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; width: 100%;">创建模糊图层</button>
+    <button id="apply-blur" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 12px; cursor: pointer; width: 100%;">创建</button>
   </div>
   
 </div>
@@ -348,7 +411,8 @@ async function updatePreview() {
   const radius = parseInt(document.getElementById('radius').value);
   const aprec = parseInt(document.getElementById('aprec').value);
   const zprec = parseInt(document.getElementById('zprec').value);
-  const performanceScale = parseFloat(document.getElementById('scale').value);
+  const scalePercent = parseInt(document.getElementById('scale').value);
+  const performanceScale = scalePercent === 0 ? 0.01 : scalePercent / 100;
   
   console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale });
   
@@ -438,12 +502,12 @@ async function updatePreview() {
   }
 }
 
-// Debounced preview update
+// Immediate preview update
 function schedulePreviewUpdate() {
   if (previewTimeoutId) {
     clearTimeout(previewTimeoutId);
   }
-  previewTimeoutId = setTimeout(updatePreview, 100);
+  previewTimeoutId = setTimeout(updatePreview, 10);
 }
 
 // Listen for messages from plugin
@@ -486,66 +550,199 @@ window.onmessage = async (event) => {
   }
 };
 
-// Custom slider functionality
+// Custom slider functionality with drag support
 function initializeCustomSliders() {
   const sliders = [
-    { id: 'radius', min: 1, max: 200, step: 1, format: (val) => val },
-    { id: 'scale', min: 0.1, max: 1.0, step: 0.01, format: (val) => parseFloat(val).toFixed(2) },
-    { id: 'aprec', min: 8, max: 24, step: 1, format: (val) => val },
-    { id: 'zprec', min: 4, max: 12, step: 1, format: (val) => val }
+    { id: 'radius', min: 0, max: 200, step: 1, format: (val) => Math.round(val) },
+    { id: 'scale', min: 0, max: 100, step: 1, format: (val) => Math.round(val) },
+    { id: 'aprec', min: 8, max: 24, step: 1, format: (val) => Math.round(val) },
+    { id: 'zprec', min: 4, max: 12, step: 1, format: (val) => Math.round(val) }
   ];
 
   sliders.forEach(slider => {
     const input = document.getElementById(slider.id);
     const handle = document.getElementById(slider.id + '-handle');
     const progress = document.getElementById(slider.id + '-progress');
-    const valueDisplay = document.getElementById(slider.id + '-value');
+    const valueInput = document.getElementById(slider.id + '-value');
+    const track = handle.parentElement;
     
-    if (!input || !handle || !progress || !valueDisplay) return;
+    if (!input || !handle || !progress || !valueInput || !track) return;
 
-    function updateSlider() {
-      const value = parseFloat(input.value);
-      const percentage = ((value - slider.min) / (slider.max - slider.min)) * 100;
+    let isDragging = false;
+
+    function updateSlider(value) {
+      const clampedValue = Math.max(slider.min, Math.min(slider.max, value));
+      const percentage = ((clampedValue - slider.min) / (slider.max - slider.min)) * 100;
       
-      progress.style.width = percentage + '%';
-      handle.style.left = percentage + '%';
-      valueDisplay.textContent = slider.format(value);
+      // Handle positioning: 0 at start, trackWidth - 18px at end
+      const trackWidth = track.offsetWidth;
+      const handleWidth = 18;
+      const availableWidth = trackWidth - handleWidth;
+      const handlePosition = (availableWidth * percentage / 100);
+      handle.style.left = handlePosition + 'px';
+      
+      // Progress width should reach the center of the handle, considering the 2px padding
+      const progressPadding = 2;
+      const handleCenter = handlePosition + (handleWidth / 2);
+      const progressWidth = handleCenter - progressPadding;
+      progress.style.width = Math.max(0, progressWidth) + 'px';
+      
+      input.value = clampedValue;
+      valueInput.value = slider.format(clampedValue);
     }
 
-    // Initialize slider appearance
-    updateSlider();
+    function getValueFromPosition(clientX) {
+      const rect = track.getBoundingClientRect();
+      const handleWidth = 18;
+      const availableWidth = rect.width - handleWidth;
+      const clickPosition = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, clickPosition / availableWidth));
+      return slider.min + percentage * (slider.max - slider.min);
+    }
 
-    // Handle input changes
-    input.addEventListener('input', updateSlider);
+    // Initialize slider appearance - delay to ensure DOM is ready
+    setTimeout(() => {
+      // If the slider is in a hidden container, show it temporarily for measurement
+      const advancedParams = document.getElementById('advanced-params');
+      const wasHidden = advancedParams && advancedParams.style.display === 'none' && advancedParams.contains(track);
+      
+      if (wasHidden) {
+        advancedParams.style.display = 'block';
+        advancedParams.style.visibility = 'hidden';
+      }
+      
+      updateSlider(parseFloat(input.value));
+      
+      if (wasHidden) {
+        advancedParams.style.display = 'none';
+        advancedParams.style.visibility = 'visible';
+      }
+    }, 1);
+
+    // Handle range input changes
+    input.addEventListener('input', (e) => {
+      updateSlider(parseFloat(e.target.value));
+      schedulePreviewUpdate();
+    });
+
+    // Handle number input changes
+    valueInput.addEventListener('input', (e) => {
+      let value = parseFloat(e.target.value);
+      if (isNaN(value)) value = slider.min;
+      updateSlider(value);
+      schedulePreviewUpdate();
+    });
+
+    // Handle mouse events on track
+    track.addEventListener('mousedown', (e) => {
+      if (e.target === track || e.target === progress) {
+        const value = getValueFromPosition(e.clientX);
+        updateSlider(value);
+        schedulePreviewUpdate();
+        isDragging = true;
+        handle.classList.add('dragging');
+        e.preventDefault();
+      }
+    });
+
+    // Handle mouse events on handle
+    handle.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      handle.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    // Global mouse events
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        const value = getValueFromPosition(e.clientX);
+        updateSlider(value);
+        schedulePreviewUpdate();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        handle.classList.remove('dragging');
+      }
+    });
+
+    // Touch events for mobile support
+    track.addEventListener('touchstart', (e) => {
+      if (e.target === track || e.target === progress) {
+        const value = getValueFromPosition(e.touches[0].clientX);
+        updateSlider(value);
+        schedulePreviewUpdate();
+        isDragging = true;
+        handle.classList.add('dragging');
+        e.preventDefault();
+      }
+    });
+
+    handle.addEventListener('touchstart', (e) => {
+      isDragging = true;
+      handle.classList.add('dragging');
+      e.preventDefault();
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (isDragging) {
+        const value = getValueFromPosition(e.touches[0].clientX);
+        updateSlider(value);
+        schedulePreviewUpdate();
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener('touchend', () => {
+      if (isDragging) {
+        isDragging = false;
+        handle.classList.remove('dragging');
+      }
+    });
   });
 }
 
 // Update parameter display values
 function updateParameterValues() {
-  document.getElementById('radius-value').textContent = document.getElementById('radius').value;
-  document.getElementById('aprec-value').textContent = document.getElementById('aprec').value;
-  document.getElementById('zprec-value').textContent = document.getElementById('zprec').value;
-  document.getElementById('scale-value').textContent = parseFloat(document.getElementById('scale').value).toFixed(2);
+  document.getElementById('radius-value').value = document.getElementById('radius').value;
+  document.getElementById('aprec-value').value = document.getElementById('aprec').value;
+  document.getElementById('zprec-value').value = document.getElementById('zprec').value;
+  document.getElementById('scale-value').value = document.getElementById('scale').value;
 }
 
 // Event listeners for parameters
 document.getElementById('radius').oninput = () => {
-  updateParameterValues();
   schedulePreviewUpdate();
 };
 
 document.getElementById('aprec').oninput = () => {
-  updateParameterValues();
   schedulePreviewUpdate();
 };
 
 document.getElementById('zprec').oninput = () => {
-  updateParameterValues();
   schedulePreviewUpdate();
 };
 
 document.getElementById('scale').oninput = () => {
-  updateParameterValues();
+  schedulePreviewUpdate();
+};
+
+// Event listeners for value inputs
+document.getElementById('radius-value').oninput = () => {
+  schedulePreviewUpdate();
+};
+
+document.getElementById('aprec-value').oninput = () => {
+  schedulePreviewUpdate();
+};
+
+document.getElementById('zprec-value').oninput = () => {
+  schedulePreviewUpdate();
+};
+
+document.getElementById('scale-value').oninput = () => {
   schedulePreviewUpdate();
 };
 
@@ -556,22 +753,67 @@ document.getElementById('advanced-toggle').onclick = () => {
   
   if (advancedParams.style.display === 'none') {
     advancedParams.style.display = 'block';
-    toggle.textContent = '▼ 高级参数';
+    toggle.classList.add('expanded');
+    
+    // Re-initialize precision sliders now that they're visible
+    setTimeout(() => {
+      const aprecInput = document.getElementById('aprec');
+      const zprecInput = document.getElementById('zprec');
+      const aprecHandle = document.getElementById('aprec-handle');
+      const zprecHandle = document.getElementById('zprec-handle');
+      const aprecProgress = document.getElementById('aprec-progress');
+      const zprecProgress = document.getElementById('zprec-progress');
+      const aprecValueInput = document.getElementById('aprec-value');
+      const zprecValueInput = document.getElementById('zprec-value');
+      const aprecTrack = aprecHandle.parentElement;
+      const zprecTrack = zprecHandle.parentElement;
+      
+      // Update aprec slider
+      if (aprecTrack && aprecTrack.offsetWidth > 0) {
+        const aprecValue = parseFloat(aprecInput.value);
+        const aprecPercentage = ((aprecValue - 8) / (24 - 8)) * 100;
+        const aprecTrackWidth = aprecTrack.offsetWidth;
+        const aprecHandleWidth = 18;
+        const aprecAvailableWidth = aprecTrackWidth - aprecHandleWidth;
+        const aprecHandlePosition = (aprecAvailableWidth * aprecPercentage / 100);
+        aprecHandle.style.left = aprecHandlePosition + 'px';
+        const aprecHandleCenter = aprecHandlePosition + (aprecHandleWidth / 2);
+        const aprecProgressWidth = aprecHandleCenter - 2;
+        aprecProgress.style.width = Math.max(0, aprecProgressWidth) + 'px';
+        aprecValueInput.value = Math.round(aprecValue);
+      }
+      
+      // Update zprec slider
+      if (zprecTrack && zprecTrack.offsetWidth > 0) {
+        const zprecValue = parseFloat(zprecInput.value);
+        const zprecPercentage = ((zprecValue - 4) / (12 - 4)) * 100;
+        const zprecTrackWidth = zprecTrack.offsetWidth;
+        const zprecHandleWidth = 18;
+        const zprecAvailableWidth = zprecTrackWidth - zprecHandleWidth;
+        const zprecHandlePosition = (zprecAvailableWidth * zprecPercentage / 100);
+        zprecHandle.style.left = zprecHandlePosition + 'px';
+        const zprecHandleCenter = zprecHandlePosition + (zprecHandleWidth / 2);
+        const zprecProgressWidth = zprecHandleCenter - 2;
+        zprecProgress.style.width = Math.max(0, zprecProgressWidth) + 'px';
+        zprecValueInput.value = Math.round(zprecValue);
+      }
+    }, 10);
+    
     // Notify plugin to expand height (1:1 preview + controls + advanced params)
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 770 
+        height: 758 
       } 
     }, '*');
   } else {
     advancedParams.style.display = 'none';
-    toggle.textContent = '▶ 高级参数';
+    toggle.classList.remove('expanded');
     // Notify plugin to reduce height (1:1 preview + basic controls)
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 650 
+        height: 620 
       } 
     }, '*');
   }
@@ -581,15 +823,15 @@ document.getElementById('apply-blur').onclick = () => {
   const radius = parseInt(document.getElementById('radius').value, 10);
   const aprec = parseInt(document.getElementById('aprec').value, 10);
   const zprec = parseInt(document.getElementById('zprec').value, 10);
-  const scale = parseFloat(document.getElementById('scale').value);
+  const scale = parseInt(document.getElementById('scale').value, 10);
   
-  if (radius < 1 || radius > 200) {
-    alert('模糊半径必须在1到200之间');
+  if (radius < 0 || radius > 200) {
+    alert('模糊半径必须在0到200之间');
     return;
   }
   
-  if (scale < 0.1 || scale > 1.0) {
-    alert('性能缩放必须在0.1到1.0之间');
+  if (scale < 0 || scale > 100) {
+    alert('性能缩放必须在0%到100%之间');
     return;
   }
   
@@ -604,11 +846,25 @@ document.getElementById('apply-blur').onclick = () => {
   }, '*');
 }
 
-// Initialize parameter values
-updateParameterValues();
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Initialize parameter values
+  updateParameterValues();
+  
+  // Initialize custom sliders
+  initializeCustomSliders();
+});
 
-// Initialize custom sliders
-initializeCustomSliders();
+// Also initialize immediately in case DOMContentLoaded already fired
+if (document.readyState === 'loading') {
+  // Still loading, wait for DOMContentLoaded
+} else {
+  // DOM already loaded
+  setTimeout(() => {
+    updateParameterValues();
+    initializeCustomSliders();
+  }, 1);
+}
 
 // Request preview update when plugin loads
 parent.postMessage({ pluginMessage: { type: 'request-preview' } }, '*');
