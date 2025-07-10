@@ -16,7 +16,7 @@
 
 1. **克隆项目**:
 ```bash
-git clone https://github.com/jadon7/Cairo-Graphics-Blur-Plugin
+git clone https://github.com/jadon7/Cairo-Graphics-Blur-Plugin.git
 cd "Cairo Graphics Blur Plugin"
 ```
 
@@ -50,25 +50,7 @@ Cairo Graphics Blur Plugin/
 ├── code.js              # 编译后的插件代码
 ├── ui.html              # 用户界面
 ├── manifest.json        # 插件配置文件
-├── Cairo Graphics.cpp   # Cairo Graphics 算法实现
 ├── package.json         # 项目依赖
 ├── tsconfig.json        # TypeScript 配置
-├── CLAUDE.md           # 项目开发指南
 └── README.md           # 项目说明文档
-```
-
-## 开发命令
-
-```bash
-# 构建 TypeScript 到 JavaScript
-npm run build
-
-# 监视模式开发 (文件更改时自动重建)
-npm run watch
-
-# 检查代码格式
-npm run lint
-
-# 自动修复代码格式问题
-npm run lint:fix
 ```
