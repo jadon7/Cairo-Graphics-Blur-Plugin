@@ -284,7 +284,7 @@ class ExponentialBlur {
     const zA = [pixels[startIndex + 3] << zprec];
 
     // Forward pass
-    for (let index = width; index < (height - 1) * width; index += width) {
+    for (let index = width; index <= (height - 1) * width; index += width) {
       const pixelIndex = startIndex + index * channels;
       this.blurInner(pixels, pixelIndex, zR, zG, zB, zA, alpha, aprec, zprec);
     }
