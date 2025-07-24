@@ -60,7 +60,7 @@ figma.on('selectionchange', async () => {
 });
 
 // Handle messages from UI
-figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number, zprec?: number, scale?: number, height?: number}) => {
+figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number, zprec?: number, scale?: number, height?: number, fillTransparent?: boolean}) => {
   if (msg.type === 'request-preview') {
     // Send current selection for preview
     if (currentSelection.length === 1) {
@@ -94,11 +94,12 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
       return;
     }
 
-    const radius = msg.radius || 5;
+    const radius = msg.radius !== undefined ? msg.radius : 5;
     const aprec = msg.aprec || 16;
     const zprec = msg.zprec || 7;
     const scalePercent = msg.scale || 33;
     const scale = scalePercent === 0 ? 0.01 : scalePercent / 100;
+    const fillTransparent = msg.fillTransparent || false;
     
     try {
       let processedCount = 0;
@@ -112,41 +113,65 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
         });
         
         try {
-          // Send image data to UI for processing with our exponential blur
-          const processedImageBytes = await new Promise<Uint8Array>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Processing timeout')), 30000);
-            
-            figma.ui.postMessage({
-              type: 'process-exponential-blur',
-              imageData: Array.from(imageBytes),
-              radius: radius,
-              aprec: aprec,
-              zprec: zprec,
-              scale: scale
+          let processedImageBytes: Uint8Array;
+          
+          if (radius === 0) {
+            // For radius 0, just apply scaling and background processing without blur
+            processedImageBytes = await new Promise<Uint8Array>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('Processing timeout')), 30000);
+              
+              figma.ui.postMessage({
+                type: 'process-no-blur',
+                imageData: Array.from(imageBytes),
+                scale: scale,
+                fillTransparent: fillTransparent
+              });
+              
+              const messageHandler = (response: {type: string, processedData?: number[], error?: string}) => {
+                if (response.type === 'no-blur-processed' && response.processedData) {
+                  clearTimeout(timeout);
+                  figma.ui.off('message', messageHandler);
+                  resolve(new Uint8Array(response.processedData));
+                } else if (response.type === 'no-blur-error' && response.error) {
+                  clearTimeout(timeout);
+                  figma.ui.off('message', messageHandler);
+                  reject(new Error(response.error));
+                }
+              };
+              figma.ui.on('message', messageHandler);
             });
-            
-            const messageHandler = (response: {type: string, processedData?: number[], error?: string}) => {
-              if (response.type === 'blur-processed' && response.processedData) {
-                clearTimeout(timeout);
-                figma.ui.off('message', messageHandler);
-                resolve(new Uint8Array(response.processedData));
-              } else if (response.type === 'blur-error' && response.error) {
-                clearTimeout(timeout);
-                figma.ui.off('message', messageHandler);
-                reject(new Error(response.error));
-              }
-            };
-            figma.ui.on('message', messageHandler);
-          });
+          } else {
+            // Send image data to UI for processing with our exponential blur
+            processedImageBytes = await new Promise<Uint8Array>((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('Processing timeout')), 30000);
+              
+              figma.ui.postMessage({
+                type: 'process-exponential-blur',
+                imageData: Array.from(imageBytes),
+                radius: radius,
+                aprec: aprec,
+                zprec: zprec,
+                scale: scale,
+                fillTransparent: fillTransparent
+              });
+              
+              const messageHandler = (response: {type: string, processedData?: number[], error?: string}) => {
+                if (response.type === 'blur-processed' && response.processedData) {
+                  clearTimeout(timeout);
+                  figma.ui.off('message', messageHandler);
+                  resolve(new Uint8Array(response.processedData));
+                } else if (response.type === 'blur-error' && response.error) {
+                  clearTimeout(timeout);
+                  figma.ui.off('message', messageHandler);
+                  reject(new Error(response.error));
+                }
+              };
+              figma.ui.on('message', messageHandler);
+            });
+          }
           
           // Create a new image with the processed data
           const newImage = figma.createImage(processedImageBytes);
-          
-          // Skip blur if radius is 0
-          if (radius === 0) {
-            figma.notify('模糊半径为0，跳过处理');
-            continue;
-          }
           
           // Create a new rectangle node for the blurred image
           const blurredNode = figma.createRectangle();

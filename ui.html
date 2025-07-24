@@ -147,6 +147,66 @@
   .advanced-toggle.expanded svg {
     transform: rotate(90deg);
   }
+
+  /* Toggle Switch Styles */
+  .toggle-switch {
+    display: flex;
+    align-items: center;
+    margin: 12px 0;
+  }
+
+  .toggle-switch .text-label {
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+    user-select: none;
+    margin-left: 16px;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider-toggle {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+  }
+
+  .slider-toggle:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+  }
+
+  input:checked + .slider-toggle {
+    background-color: #0066cc;
+  }
+
+  input:checked + .slider-toggle:before {
+    transform: translateX(20px);
+  }
 </style>
 <div style="padding: 16px;">
   
@@ -185,7 +245,7 @@
         <input class="slider-value-input" id="scale-value" type="number" value="33" min="0" max="100" step="1">
       </div>
     </div>
-    <div style="font-size: 11px; color: #666; margin-top: 2px;">较小的值可提高性能，但降低模糊质量</div>
+    <div style="font-size: 11px; color: #666; margin-top: 2px;">用于提高性能</div>
   </div>
   
   <!-- 高级参数 -->
@@ -194,7 +254,7 @@
         <svg width="6" height="10" viewBox="0 0 6 10" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M1 1L5 5L1 9" stroke="#999999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-      模糊精度
+      更多参数
     </div>
     <div id="advanced-params" style="display: none;">
       <div class="slider-container">
@@ -219,6 +279,15 @@
           </div>
           <input class="slider-value-input" id="zprec-value" type="number" value="7" min="4" max="12" step="1">
         </div>
+      </div>
+      
+      <!-- 自动填充透明区域开关 -->
+      <div class="toggle-switch">
+        <label class="switch">
+          <input type="checkbox" id="fill-transparent" checked>
+          <span class="slider-toggle"></span>
+        </label>
+        <label for="fill-transparent" class="text-label">自动填充透明区域</label>
       </div>
     </div>
   </div>
@@ -320,8 +389,102 @@ let currentImageData = null;
 let originalImage = null;
 let previewTimeoutId = null;
 
+// Helper function to composite image over black background
+function compositeOverBlackBackground(canvas, ctx) {
+  // Save original image data
+  const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  
+  // Create a temporary canvas to hold the original image
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d');
+  tempCanvas.width = canvas.width;
+  tempCanvas.height = canvas.height;
+  tempCtx.putImageData(originalImageData, 0, 0);
+  
+  // Fill the main canvas with black background
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Set composite mode to draw the original image over the black background
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(tempCanvas, 0, 0);
+  
+  // Reset composite mode
+  ctx.globalCompositeOperation = 'source-over';
+  
+  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+// Process image data without blur (only scaling and background processing)
+async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent = false) {
+  return new Promise((resolve, reject) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          console.log('Processing image without blur, original size:', img.width, 'x', img.height, 'scale:', scale);
+          
+          // Calculate scaled dimensions for processing
+          const scaledWidth = Math.max(1, Math.floor(img.width * scale));
+          const scaledHeight = Math.max(1, Math.floor(img.height * scale));
+          
+          // Create scaled canvas for processing
+          const scaledCanvas = document.createElement('canvas');
+          const scaledCtx = scaledCanvas.getContext('2d');
+          
+          scaledCanvas.width = scaledWidth;
+          scaledCanvas.height = scaledHeight;
+          
+          // Draw scaled-down image
+          scaledCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+          
+          // Apply black background if option is enabled
+          if (fillTransparent) {
+            console.log('Applying black background composite for no-blur processing');
+            compositeOverBlackBackground(scaledCanvas, scaledCtx);
+          }
+          
+          // Create final canvas at original size
+          const finalCanvas = document.createElement('canvas');
+          const finalCtx = finalCanvas.getContext('2d');
+          
+          finalCanvas.width = img.width;
+          finalCanvas.height = img.height;
+          
+          // Stretch the processed scaled image back to original size
+          finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
+          finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
+          
+          // Convert to blob and then to array buffer
+          finalCanvas.toBlob((blob) => {
+            if (blob) {
+              blob.arrayBuffer().then(buffer => {
+                resolve(Array.from(new Uint8Array(buffer)));
+              });
+            } else {
+              reject(new Error('Failed to create blob from canvas'));
+            }
+          }, 'image/png');
+          
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      img.onerror = () => reject(new Error('Failed to load image'));
+      
+      // Create blob URL from image data
+      const blob = new Blob([new Uint8Array(imageData)], { type: 'image/png' });
+      img.src = URL.createObjectURL(blob);
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 // Process image data with exponential blur with performance scaling
-async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33) {
+async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33, fillTransparent = false) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -351,8 +514,15 @@ async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, sc
           // Draw scaled-down image
           scaledCtx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
           
-          // Get image data from scaled canvas
-          const scaledImageData = scaledCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+          // Apply black background if option is enabled
+          let scaledImageData;
+          if (fillTransparent) {
+            console.log('Applying black background composite for final processing');
+            scaledImageData = compositeOverBlackBackground(scaledCanvas, scaledCtx);
+          } else {
+            console.log('Skipping black background for final processing');
+            scaledImageData = scaledCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+          }
           const pixels = scaledImageData.data;
           
           // Apply exponential blur on scaled image with scaled radius
@@ -413,8 +583,9 @@ async function updatePreview() {
   const zprec = parseInt(document.getElementById('zprec').value);
   const scalePercent = parseInt(document.getElementById('scale').value);
   const performanceScale = scalePercent === 0 ? 0.01 : scalePercent / 100;
+  const fillTransparent = document.getElementById('fill-transparent').checked;
   
-  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale });
+  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale, fillTransparent });
   
   try {
     const img = new Image();
@@ -456,8 +627,15 @@ async function updatePreview() {
       // Draw scaled-down image
       scaledCtx.drawImage(img, 0, 0, processWidth, processHeight);
       
-      // Get image data and apply blur
-      const imageDataObj = scaledCtx.getImageData(0, 0, processWidth, processHeight);
+      // Apply black background if option is enabled
+      let imageDataObj;
+      if (fillTransparent) {
+        console.log('Applying black background composite for preview');
+        imageDataObj = compositeOverBlackBackground(scaledCanvas, scaledCtx);
+      } else {
+        console.log('Skipping black background for preview');
+        imageDataObj = scaledCtx.getImageData(0, 0, processWidth, processHeight);
+      }
       const pixels = imageDataObj.data;
       
       // Apply blur with scaled radius
@@ -516,7 +694,7 @@ window.onmessage = async (event) => {
   
   if (msg.type === 'process-exponential-blur') {
     try {
-      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale);
+      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale, msg.fillTransparent);
       parent.postMessage({ 
         pluginMessage: { 
           type: 'blur-processed', 
@@ -527,6 +705,25 @@ window.onmessage = async (event) => {
       parent.postMessage({ 
         pluginMessage: { 
           type: 'blur-error', 
+          error: error.message 
+        } 
+      }, '*');
+    }
+  }
+  
+  if (msg.type === 'process-no-blur') {
+    try {
+      const processedData = await processImageWithoutBlur(msg.imageData, msg.scale, msg.fillTransparent);
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'no-blur-processed', 
+          processedData: processedData 
+        } 
+      }, '*');
+    } catch (error) {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'no-blur-error', 
           error: error.message 
         } 
       }, '*');
@@ -803,7 +1000,7 @@ document.getElementById('advanced-toggle').onclick = () => {
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 758 
+        height: 796 
       } 
     }, '*');
   } else {
@@ -824,6 +1021,9 @@ document.getElementById('apply-blur').onclick = () => {
   const aprec = parseInt(document.getElementById('aprec').value, 10);
   const zprec = parseInt(document.getElementById('zprec').value, 10);
   const scale = parseInt(document.getElementById('scale').value, 10);
+  const fillTransparent = document.getElementById('fill-transparent').checked;
+  
+  console.log('Apply blur clicked with params:', { radius, aprec, zprec, scale, fillTransparent });
   
   if (radius < 0 || radius > 200) {
     alert('模糊半径必须在0到200之间');
@@ -841,7 +1041,8 @@ document.getElementById('apply-blur').onclick = () => {
       radius: radius,
       aprec: aprec,
       zprec: zprec,
-      scale: scale
+      scale: scale,
+      fillTransparent: fillTransparent
     } 
   }, '*');
 }
@@ -853,6 +1054,9 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Initialize custom sliders
   initializeCustomSliders();
+  
+  // Add listener for transparent fill checkbox
+  document.getElementById('fill-transparent').addEventListener('change', schedulePreviewUpdate);
 });
 
 // Also initialize immediately in case DOMContentLoaded already fired
@@ -863,6 +1067,8 @@ if (document.readyState === 'loading') {
   setTimeout(() => {
     updateParameterValues();
     initializeCustomSliders();
+    // Add listener for transparent fill checkbox
+    document.getElementById('fill-transparent').addEventListener('change', schedulePreviewUpdate);
   }, 1);
 }
 
