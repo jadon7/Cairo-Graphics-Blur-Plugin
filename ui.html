@@ -244,9 +244,23 @@
       <input class="slider-value-input" id="recolor-value" type="number" value="0" min="0" max="255" step="1">
     </div>
   </div>
+
+  <div class="slider-container">
+    <label class="slider-label">缩放结果（去黑边）</label>
+    <div class="custom-slider">
+      <div class="slider-track">
+        <div class="slider-progress" id="crop-progress"></div>
+        <div class="slider-handle" id="crop-handle"></div>
+        <input class="slider-input" id="crop" type="range" value="100" min="100" max="200" step="1">
+      </div>
+      <div class="scale-input-container">
+        <input class="slider-value-input" id="crop-value" type="number" value="100" min="100" max="200" step="1">
+      </div>
+    </div>
+  </div>
   
   <div class="slider-container">
-    <label class="slider-label">缩放比例（性能优化）</label>
+    <label class="slider-label">计算比例（性能优化）</label>
     <div class="custom-slider">
       <div class="slider-track">
         <div class="slider-progress" id="scale-progress"></div>
@@ -259,19 +273,7 @@
     </div>
   </div>
   
-  <div class="slider-container">
-    <label class="slider-label">放大结果（去黑边）</label>
-    <div class="custom-slider">
-      <div class="slider-track">
-        <div class="slider-progress" id="crop-progress"></div>
-        <div class="slider-handle" id="crop-handle"></div>
-        <input class="slider-input" id="crop" type="range" value="100" min="100" max="200" step="1">
-      </div>
-      <div class="scale-input-container">
-        <input class="slider-value-input" id="crop-value" type="number" value="100" min="100" max="200" step="1">
-      </div>
-    </div>
-  </div>
+ 
   
   <!-- 高级参数 -->
   <div style="margin-bottom: 16px;">
