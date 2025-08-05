@@ -212,9 +212,9 @@
   
   <!-- 预览区域 -->
   <div style="margin-bottom: 16px;">
-    <div style="width: 100%; aspect-ratio: 1; border: 1px solid #ccc; background: #f5f5f5; position: relative;">
-      <canvas id="preview-canvas" style="width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0;"></canvas>
-      <div id="preview-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #666; position: absolute; top: 0; left: 0;">
+    <div style="width: 100%; aspect-ratio: 1; border: 1px solid #ccc; background: #f5f5f5; position: relative; border-radius: 50%; overflow: hidden;">
+      <canvas id="preview-canvas" style="width: 100%; height: 100%; display: none; position: absolute; top: 0; left: 0; border-radius: 50%;"></canvas>
+      <div id="preview-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #666; position: absolute; top: 0; left: 0; border-radius: 50%;">
         选择对象以查看预览
       </div>
     </div>
@@ -234,7 +234,7 @@
   </div>
   
   <div class="slider-container">
-    <label class="slider-label">着色强度</label>
+    <label class="slider-label">压黑强度</label>
     <div class="custom-slider">
       <div class="slider-track">
         <div class="slider-progress" id="recolor-progress"></div>
@@ -243,11 +243,10 @@
       </div>
       <input class="slider-value-input" id="recolor-value" type="number" value="0" min="0" max="255" step="1">
     </div>
-    <div style="font-size: 11px; color: #666; margin-top: 2px;">0=原始颜色, 255=压暗到黑色</div>
   </div>
   
   <div class="slider-container">
-    <label class="slider-label">缩放比例</label>
+    <label class="slider-label">缩放比例（性能优化）</label>
     <div class="custom-slider">
       <div class="slider-track">
         <div class="slider-progress" id="scale-progress"></div>
@@ -258,7 +257,20 @@
         <input class="slider-value-input" id="scale-value" type="number" value="33" min="0" max="100" step="1">
       </div>
     </div>
-    <div style="font-size: 11px; color: #666; margin-top: 2px;">用于提高性能</div>
+  </div>
+  
+  <div class="slider-container">
+    <label class="slider-label">放大结果（去黑边）</label>
+    <div class="custom-slider">
+      <div class="slider-track">
+        <div class="slider-progress" id="crop-progress"></div>
+        <div class="slider-handle" id="crop-handle"></div>
+        <input class="slider-input" id="crop" type="range" value="100" min="100" max="200" step="1">
+      </div>
+      <div class="scale-input-container">
+        <input class="slider-value-input" id="crop-value" type="number" value="100" min="100" max="200" step="1">
+      </div>
+    </div>
   </div>
   
   <!-- 高级参数 -->
@@ -425,6 +437,34 @@ class ImageRecolor {
   }
 }
 
+// Crop function to enlarge and crop image to reduce black edges
+function applyCrop(sourceCanvas, cropPercent) {
+  if (cropPercent <= 100) {
+    // No cropping needed
+    return sourceCanvas;
+  }
+  
+  const cropScale = cropPercent / 100; // Convert percent to scale (1.0 - 2.0)
+  
+  // Create new canvas with original dimensions
+  const croppedCanvas = document.createElement('canvas');
+  const croppedCtx = croppedCanvas.getContext('2d');
+  croppedCanvas.width = sourceCanvas.width;
+  croppedCanvas.height = sourceCanvas.height;
+  
+  // Calculate scaled dimensions and offset for centering
+  const scaledWidth = sourceCanvas.width * cropScale;
+  const scaledHeight = sourceCanvas.height * cropScale;
+  const offsetX = (sourceCanvas.width - scaledWidth) / 2;
+  const offsetY = (sourceCanvas.height - scaledHeight) / 2;
+  
+  // Draw the source image scaled and centered
+  croppedCtx.imageSmoothingEnabled = true; // Use smooth scaling for crop
+  croppedCtx.drawImage(sourceCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
+  
+  return croppedCanvas;
+}
+
 // Global variables for preview
 let currentImageData = null;
 let originalImage = null;
@@ -457,7 +497,7 @@ function compositeOverBlackBackground(canvas, ctx) {
 }
 
 // Process image data without blur (only scaling and background processing)
-async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent = false, recolorParams = null) {
+async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent = false, recolorParams = null, cropPercent = 100) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -504,8 +544,11 @@ async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent 
           finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
           finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
           
+          // Apply crop to reduce black edges
+          const croppedCanvas = applyCrop(finalCanvas, cropPercent);
+          
           // Convert to blob and then to array buffer
-          finalCanvas.toBlob((blob) => {
+          croppedCanvas.toBlob((blob) => {
             if (blob) {
               blob.arrayBuffer().then(buffer => {
                 resolve(Array.from(new Uint8Array(buffer)));
@@ -533,7 +576,7 @@ async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent 
 }
 
 // Process image data with exponential blur with performance scaling
-async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33, fillTransparent = false, recolorParams = null) {
+async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33, fillTransparent = false, recolorParams = null, cropPercent = 100) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -598,8 +641,11 @@ async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, sc
           finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
           finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
           
+          // Apply crop to reduce black edges
+          const croppedCanvas = applyCrop(finalCanvas, cropPercent);
+          
           // Convert to blob and then to array buffer
-          finalCanvas.toBlob((blob) => {
+          croppedCanvas.toBlob((blob) => {
             if (blob) {
               blob.arrayBuffer().then(buffer => {
                 resolve(Array.from(new Uint8Array(buffer)));
@@ -648,7 +694,10 @@ async function updatePreview() {
     opacity: recolorOpacity
   } : { enabled: false };
   
-  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale, fillTransparent, recolorParams });
+  // Get crop parameters
+  const cropPercent = parseInt(document.getElementById('crop').value);
+  
+  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale, fillTransparent, recolorParams, cropPercent });
   
   try {
     const img = new Image();
@@ -723,6 +772,9 @@ async function updatePreview() {
       finalCtx.imageSmoothingEnabled = false; // Preserve the pixelated look for performance
       finalCtx.drawImage(scaledCanvas, 0, 0, img.width, img.height);
       
+      // Apply crop to preview
+      const previewCroppedCanvas = applyCrop(finalCanvas, cropPercent);
+      
       // Calculate scaling to fit in container while maintaining aspect ratio
       const displayScale = Math.min(containerSize / img.width, containerSize / img.height);
       const scaledWidth = img.width * displayScale;
@@ -733,7 +785,7 @@ async function updatePreview() {
       console.log('Display scale:', displayScale, 'Final size:', scaledWidth, 'x', scaledHeight, 'Offset:', offsetX, offsetY);
       
       // Draw scaled result centered in canvas
-      ctx.drawImage(finalCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
+      ctx.drawImage(previewCroppedCanvas, offsetX, offsetY, scaledWidth, scaledHeight);
       console.log('Preview updated successfully');
     };
     
@@ -764,7 +816,7 @@ window.onmessage = async (event) => {
   
   if (msg.type === 'process-exponential-blur') {
     try {
-      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale, msg.fillTransparent, msg.recolorParams);
+      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale, msg.fillTransparent, msg.recolorParams, msg.cropPercent);
       parent.postMessage({ 
         pluginMessage: { 
           type: 'blur-processed', 
@@ -783,7 +835,7 @@ window.onmessage = async (event) => {
   
   if (msg.type === 'process-no-blur') {
     try {
-      const processedData = await processImageWithoutBlur(msg.imageData, msg.scale, msg.fillTransparent, msg.recolorParams);
+      const processedData = await processImageWithoutBlur(msg.imageData, msg.scale, msg.fillTransparent, msg.recolorParams, msg.cropPercent);
       parent.postMessage({ 
         pluginMessage: { 
           type: 'no-blur-processed', 
@@ -823,6 +875,7 @@ function initializeCustomSliders() {
     { id: 'radius', min: 0, max: 200, step: 1, format: (val) => Math.round(val) },
     { id: 'recolor', min: 0, max: 255, step: 1, format: (val) => Math.round(val) },
     { id: 'scale', min: 0, max: 100, step: 1, format: (val) => Math.round(val) },
+    { id: 'crop', min: 100, max: 200, step: 1, format: (val) => Math.round(val) },
     { id: 'aprec', min: 8, max: 24, step: 1, format: (val) => Math.round(val) },
     { id: 'zprec', min: 4, max: 12, step: 1, format: (val) => Math.round(val) }
   ];
@@ -1023,6 +1076,15 @@ document.getElementById('recolor-value').oninput = () => {
   schedulePreviewUpdate();
 };
 
+// Event listeners for crop parameters
+document.getElementById('crop').oninput = () => {
+  schedulePreviewUpdate();
+};
+
+document.getElementById('crop-value').oninput = () => {
+  schedulePreviewUpdate();
+};
+
 // Advanced parameters toggle
 document.getElementById('advanced-toggle').onclick = () => {
   const advancedParams = document.getElementById('advanced-params');
@@ -1080,7 +1142,7 @@ document.getElementById('advanced-toggle').onclick = () => {
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 890
+        height: 920
       } 
     }, '*');
   } else {
@@ -1090,7 +1152,7 @@ document.getElementById('advanced-toggle').onclick = () => {
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 714 
+        height: 740 
       } 
     }, '*');
   }
@@ -1111,7 +1173,10 @@ document.getElementById('apply-blur').onclick = () => {
     opacity: recolorOpacity
   } : { enabled: false };
   
-  console.log('Apply blur clicked with params:', { radius, aprec, zprec, scale, fillTransparent, recolorParams });
+  // Get crop parameters
+  const cropPercent = parseInt(document.getElementById('crop').value);
+  
+  console.log('Apply blur clicked with params:', { radius, aprec, zprec, scale, fillTransparent, recolorParams, cropPercent });
   
   if (radius < 0 || radius > 200) {
     alert('模糊半径必须在0到200之间');
@@ -1131,7 +1196,8 @@ document.getElementById('apply-blur').onclick = () => {
       zprec: zprec,
       scale: scale,
       fillTransparent: fillTransparent,
-      recolorParams: recolorParams
+      recolorParams: recolorParams,
+      cropPercent: cropPercent
     } 
   }, '*');
 }

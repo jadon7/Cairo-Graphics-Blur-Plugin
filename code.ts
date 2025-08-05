@@ -3,7 +3,7 @@
 // This file handles plugin logic, UI communication, and image creation
 
 // Show the UI with default height (1:1 preview + basic controls + recolor)
-figma.showUI(__html__, { width: 360, height: 714 });
+figma.showUI(__html__, { width: 360, height: 740 });
 
 // Keep track of current selection for preview
 let currentSelection: readonly SceneNode[] = [];
@@ -60,7 +60,7 @@ figma.on('selectionchange', async () => {
 });
 
 // Handle messages from UI
-figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number, zprec?: number, scale?: number, height?: number, fillTransparent?: boolean, recolorParams?: any}) => {
+figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number, zprec?: number, scale?: number, height?: number, fillTransparent?: boolean, recolorParams?: any, cropPercent?: number}) => {
   if (msg.type === 'request-preview') {
     // Send current selection for preview
     if (currentSelection.length === 1) {
@@ -101,6 +101,7 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
     const scale = scalePercent === 0 ? 0.01 : scalePercent / 100;
     const fillTransparent = msg.fillTransparent || false;
     const recolorParams = msg.recolorParams || { enabled: false };
+    const cropPercent = msg.cropPercent || 100;
     
     try {
       let processedCount = 0;
@@ -126,7 +127,8 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
                 imageData: Array.from(imageBytes),
                 scale: scale,
                 fillTransparent: fillTransparent,
-                recolorParams: recolorParams
+                recolorParams: recolorParams,
+                cropPercent: cropPercent
               });
               
               const messageHandler = (response: {type: string, processedData?: number[], error?: string}) => {
@@ -155,7 +157,8 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
                 zprec: zprec,
                 scale: scale,
                 fillTransparent: fillTransparent,
-                recolorParams: recolorParams
+                recolorParams: recolorParams,
+                cropPercent: cropPercent
               });
               
               const messageHandler = (response: {type: string, processedData?: number[], error?: string}) => {
@@ -194,10 +197,17 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
           
           blurredNode.fills = [imageFill];
           
-          // Name the new layer with blur parameters and recolor info
+          // Set 50% corner radius to create circular effect
+          const cornerRadius = Math.min(node.width, node.height) / 2;
+          blurredNode.cornerRadius = cornerRadius;
+          
+          // Name the new layer with blur parameters, recolor info, and crop info
           let layerName = `指数模糊 r=${radius} s=${scalePercent}%`;
           if (recolorParams.enabled) {
             layerName += ` 着色强度${recolorParams.opacity}`;
+          }
+          if (cropPercent > 100) {
+            layerName += ` 剪裁${cropPercent}%`;
           }
           blurredNode.name = layerName;
           
