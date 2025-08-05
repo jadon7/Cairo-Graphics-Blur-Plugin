@@ -234,6 +234,19 @@
   </div>
   
   <div class="slider-container">
+    <label class="slider-label">着色强度</label>
+    <div class="custom-slider">
+      <div class="slider-track">
+        <div class="slider-progress" id="recolor-progress"></div>
+        <div class="slider-handle" id="recolor-handle"></div>
+        <input class="slider-input" id="recolor" type="range" value="0" min="0" max="255" step="1">
+      </div>
+      <input class="slider-value-input" id="recolor-value" type="number" value="0" min="0" max="255" step="1">
+    </div>
+    <div style="font-size: 11px; color: #666; margin-top: 2px;">0=原始颜色, 255=压暗到黑色</div>
+  </div>
+  
+  <div class="slider-container">
     <label class="slider-label">缩放比例</label>
     <div class="custom-slider">
       <div class="slider-track">
@@ -289,6 +302,8 @@
         </label>
         <label for="fill-transparent" class="text-label">自动填充透明区域</label>
       </div>
+      
+
     </div>
   </div>
   
@@ -384,6 +399,32 @@ class ExponentialBlur {
   }
 }
 
+// JavaScript implementation of the recolor algorithm based on LVGL
+class ImageRecolor {
+  // Color mixing function - equivalent to lv_color_mix
+  static colorMix(color, mix) {
+    return {
+      red: Math.round((color.red * mix + 255 * (255 - mix)) / 255),
+      green: Math.round((color.green * mix + 255 * (255 - mix)) / 255),
+      blue: Math.round((color.blue * mix + 255 * (255 - mix)) / 255)
+    };
+  }
+
+  // Apply recolor to image data - equivalent to recolor_img
+  static applyRecolor(imageData, recolor, recolorOpa) {
+    const pixels = imageData.data;
+    const colorMix = this.colorMix(recolor, recolorOpa);
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      // Skip alpha channel, only process RGB
+      pixels[i] = Math.round((pixels[i] * colorMix.blue) / 255);     // Blue
+      pixels[i + 1] = Math.round((pixels[i + 1] * colorMix.green) / 255); // Green  
+      pixels[i + 2] = Math.round((pixels[i + 2] * colorMix.red) / 255);   // Red
+      // Alpha channel (pixels[i + 3]) remains unchanged
+    }
+  }
+}
+
 // Global variables for preview
 let currentImageData = null;
 let originalImage = null;
@@ -416,7 +457,7 @@ function compositeOverBlackBackground(canvas, ctx) {
 }
 
 // Process image data without blur (only scaling and background processing)
-async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent = false) {
+async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent = false, recolorParams = null) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -442,6 +483,14 @@ async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent 
           if (fillTransparent) {
             console.log('Applying black background composite for no-blur processing');
             compositeOverBlackBackground(scaledCanvas, scaledCtx);
+          }
+          
+          // Apply recolor if enabled
+          if (recolorParams && recolorParams.enabled) {
+            console.log('Applying recolor without blur with params:', recolorParams);
+            const imageDataForRecolor = scaledCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+            ImageRecolor.applyRecolor(imageDataForRecolor, recolorParams.color, recolorParams.opacity);
+            scaledCtx.putImageData(imageDataForRecolor, 0, 0);
           }
           
           // Create final canvas at original size
@@ -484,7 +533,7 @@ async function processImageWithoutBlur(imageData, scale = 0.33, fillTransparent 
 }
 
 // Process image data with exponential blur with performance scaling
-async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33, fillTransparent = false) {
+async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, scale = 0.33, fillTransparent = false, recolorParams = null) {
   return new Promise((resolve, reject) => {
     try {
       const img = new Image();
@@ -528,6 +577,12 @@ async function processImageWithBlur(imageData, radius, aprec = 16, zprec = 7, sc
           // Apply exponential blur on scaled image with scaled radius
           const scaledRadius = Math.max(1, Math.floor(radius * scale));
           ExponentialBlur.applyBlur(pixels, scaledWidth, scaledHeight, 4, scaledRadius, aprec, zprec);
+          
+          // Apply recolor if enabled
+          if (recolorParams && recolorParams.enabled) {
+            console.log('Applying recolor with params:', recolorParams);
+            ImageRecolor.applyRecolor(scaledImageData, recolorParams.color, recolorParams.opacity);
+          }
           
           // Put processed data back to scaled canvas
           scaledCtx.putImageData(scaledImageData, 0, 0);
@@ -585,7 +640,15 @@ async function updatePreview() {
   const performanceScale = scalePercent === 0 ? 0.01 : scalePercent / 100;
   const fillTransparent = document.getElementById('fill-transparent').checked;
   
-  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale, fillTransparent });
+  // Get recolor parameters (fixed to black color)
+  const recolorOpacity = parseInt(document.getElementById('recolor').value);
+  const recolorParams = recolorOpacity > 0 ? {
+    enabled: true,
+    color: { red: 0, green: 0, blue: 0 }, // Fixed to black
+    opacity: recolorOpacity
+  } : { enabled: false };
+  
+  console.log('Updating preview with params:', { radius, aprec, zprec, performanceScale, fillTransparent, recolorParams });
   
   try {
     const img = new Image();
@@ -641,6 +704,13 @@ async function updatePreview() {
       // Apply blur with scaled radius
       const scaledRadius = Math.max(1, Math.floor(radius * performanceScale));
       ExponentialBlur.applyBlur(pixels, processWidth, processHeight, 4, scaledRadius, aprec, zprec);
+      
+      // Apply recolor if enabled
+      if (recolorParams.enabled) {
+        console.log('Applying recolor in preview with params:', recolorParams);
+        ImageRecolor.applyRecolor(imageDataObj, recolorParams.color, recolorParams.opacity);
+      }
+      
       scaledCtx.putImageData(imageDataObj, 0, 0);
       
       // Create final canvas at original size
@@ -694,7 +764,7 @@ window.onmessage = async (event) => {
   
   if (msg.type === 'process-exponential-blur') {
     try {
-      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale, msg.fillTransparent);
+      const processedData = await processImageWithBlur(msg.imageData, msg.radius, msg.aprec, msg.zprec, msg.scale, msg.fillTransparent, msg.recolorParams);
       parent.postMessage({ 
         pluginMessage: { 
           type: 'blur-processed', 
@@ -713,7 +783,7 @@ window.onmessage = async (event) => {
   
   if (msg.type === 'process-no-blur') {
     try {
-      const processedData = await processImageWithoutBlur(msg.imageData, msg.scale, msg.fillTransparent);
+      const processedData = await processImageWithoutBlur(msg.imageData, msg.scale, msg.fillTransparent, msg.recolorParams);
       parent.postMessage({ 
         pluginMessage: { 
           type: 'no-blur-processed', 
@@ -751,6 +821,7 @@ window.onmessage = async (event) => {
 function initializeCustomSliders() {
   const sliders = [
     { id: 'radius', min: 0, max: 200, step: 1, format: (val) => Math.round(val) },
+    { id: 'recolor', min: 0, max: 255, step: 1, format: (val) => Math.round(val) },
     { id: 'scale', min: 0, max: 100, step: 1, format: (val) => Math.round(val) },
     { id: 'aprec', min: 8, max: 24, step: 1, format: (val) => Math.round(val) },
     { id: 'zprec', min: 4, max: 12, step: 1, format: (val) => Math.round(val) }
@@ -943,6 +1014,15 @@ document.getElementById('scale-value').oninput = () => {
   schedulePreviewUpdate();
 };
 
+// Event listeners for recolor parameters
+document.getElementById('recolor').oninput = () => {
+  schedulePreviewUpdate();
+};
+
+document.getElementById('recolor-value').oninput = () => {
+  schedulePreviewUpdate();
+};
+
 // Advanced parameters toggle
 document.getElementById('advanced-toggle').onclick = () => {
   const advancedParams = document.getElementById('advanced-params');
@@ -1000,17 +1080,17 @@ document.getElementById('advanced-toggle').onclick = () => {
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 796 
+        height: 890
       } 
     }, '*');
   } else {
     advancedParams.style.display = 'none';
     toggle.classList.remove('expanded');
-    // Notify plugin to reduce height (1:1 preview + basic controls)
+    // Notify plugin to reduce height (1:1 preview + basic controls + recolor)
     parent.postMessage({ 
       pluginMessage: { 
         type: 'resize-ui', 
-        height: 620 
+        height: 714 
       } 
     }, '*');
   }
@@ -1023,7 +1103,15 @@ document.getElementById('apply-blur').onclick = () => {
   const scale = parseInt(document.getElementById('scale').value, 10);
   const fillTransparent = document.getElementById('fill-transparent').checked;
   
-  console.log('Apply blur clicked with params:', { radius, aprec, zprec, scale, fillTransparent });
+  // Get recolor parameters (fixed to black color)
+  const recolorOpacity = parseInt(document.getElementById('recolor').value);
+  const recolorParams = recolorOpacity > 0 ? {
+    enabled: true,
+    color: { red: 0, green: 0, blue: 0 }, // Fixed to black
+    opacity: recolorOpacity
+  } : { enabled: false };
+  
+  console.log('Apply blur clicked with params:', { radius, aprec, zprec, scale, fillTransparent, recolorParams });
   
   if (radius < 0 || radius > 200) {
     alert('模糊半径必须在0到200之间');
@@ -1042,7 +1130,8 @@ document.getElementById('apply-blur').onclick = () => {
       aprec: aprec,
       zprec: zprec,
       scale: scale,
-      fillTransparent: fillTransparent
+      fillTransparent: fillTransparent,
+      recolorParams: recolorParams
     } 
   }, '*');
 }
@@ -1057,6 +1146,8 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Add listener for transparent fill checkbox
   document.getElementById('fill-transparent').addEventListener('change', schedulePreviewUpdate);
+  
+
 });
 
 // Also initialize immediately in case DOMContentLoaded already fired
@@ -1069,6 +1160,8 @@ if (document.readyState === 'loading') {
     initializeCustomSliders();
     // Add listener for transparent fill checkbox
     document.getElementById('fill-transparent').addEventListener('change', schedulePreviewUpdate);
+    
+
   }, 1);
 }
 
