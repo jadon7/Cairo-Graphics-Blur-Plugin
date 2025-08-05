@@ -207,7 +207,7 @@ figma.ui.onmessage = async (msg: {type: string, radius?: number, aprec?: number,
             layerName += ` 着色强度${recolorParams.opacity}`;
           }
           if (cropPercent > 100) {
-            layerName += ` 剪裁${cropPercent}%`;
+            layerName += ` 整体放大${cropPercent}%`;
           }
           blurredNode.name = layerName;
           
